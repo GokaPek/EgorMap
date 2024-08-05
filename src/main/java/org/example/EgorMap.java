@@ -1,19 +1,21 @@
 package org.example;
+
 import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-public class EgorMap<K, V> implements Map<K, V>{
-    private static final int DEFAULT_CAPACITY = 128;
-    private static final int DEFAULT_LOAD_FACTOR = 0;
+
+public class EgorMap<K, V> implements Map<K, V> {
+    private static final int CAPACITY = 128;
+    private static final float LOAD_FACTOR = 0F;
+    private final Lock lock = new ReentrantLock();
     // Переменные экземпляра для хранения емкости, коэффициента загрузки, размера и таблицы
     private int capacity;
-    private float loadFactor = DEFAULT_LOAD_FACTOR;
-    private int size;
+    private float loadFactor = LOAD_FACTOR;
+    private int size = 0;
     private List<Entry<K, V>>[] table;
-    private final Lock lock = new ReentrantLock();
 
     public EgorMap() {
-        this(DEFAULT_CAPACITY);
+        this(CAPACITY);
     }
 
     public EgorMap(int capacity) {
@@ -25,14 +27,9 @@ public class EgorMap<K, V> implements Map<K, V>{
         }
     }
 
-    public EgorMap(int capacity, float loadFactor) {
-        this.capacity = capacity;
+    public  EgorMap(int capacity, float loadFactor){
+        this(capacity);
         this.loadFactor = loadFactor;
-        // Инициализация таблицы с заданной емкостью
-        this.table = new List[capacity];
-        for (int i = 0; i < capacity; i++) {
-            table[i] = new ArrayList<>();
-        }
     }
 
     @Override
@@ -77,13 +74,14 @@ public class EgorMap<K, V> implements Map<K, V>{
     public V put(K key, V value) {
         lock.lock();
         try {
-            if (size >= capacity * loadFactor) {
+            if (size > capacity * loadFactor) {
                 resize(); // Если достигнут предел загрузки, увеличиваем размер таблицы
             }
             V oldValue = remove(key); // Удаляем существующую пару, если ключ уже есть
             int index = getHashCode(key);
             table[index].add(new Entry<>(key, value)); // Добавляем новую пару
             size++;
+            updateLoadFactor(); // Обновляем коэффициент загрузки после увеличения размера
             return oldValue; // Возвращаем старое значение, если ключ уже был в мапе
         } finally {
             lock.unlock();
@@ -92,19 +90,26 @@ public class EgorMap<K, V> implements Map<K, V>{
 
     // Увеличивает размер таблицы в два раза
     private void resize() {
-        capacity *= 2;
-        List<Entry<K, V>>[] newTable = new List[capacity];
-        for (int i = 0; i < capacity; i++) {
-            newTable[i] = new ArrayList<>();
-        }
-        for (List<Entry<K, V>> bucket : table) {
-            for (Entry<K, V> entry : bucket) {
-                int index = getHashCode(entry.key);
-                newTable[index].add(entry);
+        lock.lock();
+        try {
+            capacity *= 2;
+            List<Entry<K, V>>[] newTable = new List[capacity];
+            for (int i = 0; i < capacity; i++) {
+                newTable[i] = new ArrayList<>();
             }
+            for (List<Entry<K, V>> bucket : table) {
+                for (Entry<K, V> entry : bucket) {
+                    int index = getHashCode(entry.key);
+                    newTable[index].add(entry);
+                }
+            }
+            table = newTable;
+            updateLoadFactor(); // Обновляем коэффициент загрузки после ресайза
+        } finally {
+            lock.unlock();
         }
-        table = newTable;
     }
+
 
     @Override
     public V remove(Object key) {
@@ -115,6 +120,7 @@ public class EgorMap<K, V> implements Map<K, V>{
                 if (entry.key.equals(key)) {
                     table[index].remove(entry);
                     size--;
+                    updateLoadFactor();
                     return entry.value;
                 }
             }
@@ -124,24 +130,51 @@ public class EgorMap<K, V> implements Map<K, V>{
         }
     }
 
+    // Копирует все пары ключ-значение из заданной мапы в текущую мапу
     @Override
     public void putAll(Map<? extends K, ? extends V> m) {
-
+        for (Map.Entry<? extends K, ? extends V> entry : m.entrySet()) {
+            put(entry.getKey(), entry.getValue());
+        }
     }
 
+    // Очищает мапу
     @Override
     public void clear() {
-
+        lock.lock();
+        try {
+            for (int i = 0; i < capacity; i++) {
+                table[i].clear();
+            }
+            size = 0;
+            updateLoadFactor();
+        } finally {
+            lock.unlock();
+        }
     }
 
+    // Возвращает множество всех ключей в мапе
     @Override
     public Set<K> keySet() {
-        return null;
+        Set<K> keys = new HashSet<>();
+        for (List<Entry<K, V>> bucket : table) {
+            for (Entry<K, V> entry : bucket) {
+                keys.add(entry.key);
+            }
+        }
+        return keys;
     }
 
+    // Возвращает коллекцию всех значений в мапе
     @Override
     public Collection<V> values() {
-        return null;
+        List<V> values = new ArrayList<>();
+        for (List<Entry<K, V>> bucket : table) {
+            for (Entry<K, V> entry : bucket) {
+                values.add(entry.value);
+            }
+        }
+        return values;
     }
 
     @Override
@@ -158,6 +191,10 @@ public class EgorMap<K, V> implements Map<K, V>{
             return 0;
         }
         return (key.hashCode() & 0x7FFFFFFF) % capacity;
+    }
+
+    private void updateLoadFactor() {
+        this.loadFactor = (float) size / capacity;
     }
 
     // Внутренний класс для представления пары ключ-значение
