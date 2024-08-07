@@ -14,6 +14,7 @@ public class Main {
             egorMap.put(i, i);
         }
         long endTime = System.nanoTime();
+        System.out.println(egorMap.getCapacity());
         System.out.println("EgorMap put time: " + (endTime - startTime) / 1000000 + " ms");
 
         startTime = System.nanoTime();

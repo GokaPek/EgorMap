@@ -36,6 +36,7 @@ public class EgorMap<K, V> implements Map<K, V> {
     public int size() {
         return size;
     }
+    public int getCapacity() { return capacity; }
 
     @Override
     public boolean isEmpty() {
