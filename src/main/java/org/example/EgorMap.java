@@ -6,7 +6,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class EgorMap<K, V> implements Map<K, V> {
     private static final int CAPACITY = 128;
-    private static final float LOAD_FACTOR = 0F;
+    private static final float LOAD_FACTOR = 0.75F;
     private final Lock lock = new ReentrantLock();
     // Переменные экземпляра для хранения емкости, коэффициента загрузки, размера и таблицы
     private int capacity;
@@ -76,14 +76,13 @@ public class EgorMap<K, V> implements Map<K, V> {
         lock.lock();
         try {
             if (size > capacity * loadFactor) {
-                resize(); // Если достигнут предел загрузки, увеличиваем размер таблицы
+                resize();
             }
-            V oldValue = remove(key); // Удаляем существующую пару, если ключ уже есть
+            V oldValue = remove(key);
             int index = getHashCode(key);
-            table[index].add(new Entry<>(key, value)); // Добавляем новую пару
+            table[index].add(new Entry<>(key, value));
             size++;
-            updateLoadFactor(); // Обновляем коэффициент загрузки после увеличения размера
-            return oldValue; // Возвращаем старое значение, если ключ уже был в мапе
+            return oldValue;
         } finally {
             lock.unlock();
         }
@@ -105,7 +104,6 @@ public class EgorMap<K, V> implements Map<K, V> {
                 }
             }
             table = newTable;
-            updateLoadFactor(); // Обновляем коэффициент загрузки после ресайза
         } finally {
             lock.unlock();
         }
@@ -117,11 +115,12 @@ public class EgorMap<K, V> implements Map<K, V> {
         lock.lock();
         try {
             int index = getHashCode(key);
-            for (Entry<K, V> entry : table[index]) {
+            Iterator<Entry<K, V>> iterator = table[index].iterator();
+            while (iterator.hasNext()) {
+                Entry<K, V> entry = iterator.next();
                 if (entry.key.equals(key)) {
-                    table[index].remove(entry);
+                    iterator.remove();
                     size--;
-                    updateLoadFactor();
                     return entry.value;
                 }
             }
@@ -148,7 +147,6 @@ public class EgorMap<K, V> implements Map<K, V> {
                 table[i].clear();
             }
             size = 0;
-            updateLoadFactor();
         } finally {
             lock.unlock();
         }
@@ -192,10 +190,6 @@ public class EgorMap<K, V> implements Map<K, V> {
             return 0;
         }
         return (key.hashCode() & 0x7FFFFFFF) % capacity;
-    }
-
-    private void updateLoadFactor() {
-        this.loadFactor = (float) size / capacity;
     }
 
     // Внутренний класс для представления пары ключ-значение
